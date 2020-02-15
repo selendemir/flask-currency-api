@@ -27,12 +27,13 @@ class ExchangeModel:
     @property
     def toString(self):
         return "{} {} {}".format(self.base, self.currency, self.rate)
+
     @property
     def toDict(self):
-        return dict(base=self.__base, currency=self.__currency, rate = self.__rate)
+        return dict(base=self.__base, currency=self.__currency, rate=self.__rate)
+
 
 class CurrencyServices:
-
 
     def __getEuroBasedCurrencyRates(self):
         URL = 'https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml'
@@ -56,17 +57,15 @@ class CurrencyServices:
 
         return currencyRates
 
-
-    def __getViceVersa(self,exchanges: [ExchangeModel])-> [ExchangeModel]:
+    def __getViceVersa(self, exchanges: [ExchangeModel]) -> [ExchangeModel]:
         newExchanges = []
         for exchange in exchanges:
-            rate = 1/exchange.rate
+            rate = 1 / exchange.rate
             base = exchange.currency
             currency = exchange.base
             newExchange = ExchangeModel(base, currency, rate)
             newExchanges.append(newExchange)
         return newExchanges
-
 
     def getAllCurrencyRates(self):
         euroCurrencyRates = self.__getEuroBasedCurrencyRates()
@@ -76,7 +75,7 @@ class CurrencyServices:
             for exchange2 in euroCurrencyRates:
                 if exchange1.currency == exchange2.currency:
                     continue
-                rate = exchange1.rate/exchange2.rate
+                rate = exchange1.rate / exchange2.rate
                 base = exchange2.currency
                 currency = exchange1.currency
                 exchange = ExchangeModel(base, currency, rate)
