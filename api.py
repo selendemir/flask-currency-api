@@ -1,54 +1,64 @@
 from flask import Flask, jsonify
 from pymongo import MongoClient
 from apscheduler.schedulers.background import BackgroundScheduler
-from rates import CurrencyServices
+from eu_central_bank_currency_service import CurrencyServices
 from datetime import datetime
+from mongo_database_service import DatabaseService
 
-mongo = MongoClient("localhost", 27017)
 
-db = mongo.currency_db
-currencyDoc = db.currencies
 app = Flask(__name__)
+mongo = MongoClient("localhost", 27017)
+databaseService = DatabaseService(mongo)
+
+
 scheduler = BackgroundScheduler(daemon=True)
-
 currencyService = CurrencyServices()
-
 
 def currencyLoaderJob():
     currencyRates = currencyService.getAllCurrencyRates()
-    jsonConverter = lambda exchange: exchange.toDict
-    currencyRatesDictList = map(jsonConverter, currencyRates)
-    currencyDoc.delete_many({})
-    currencyDoc.insert_many(currencyRatesDictList)
-    print("Job Successe")
+    mapToBase = lambda exchange: exchange.base
+
+    currencies = map(mapToBase,currencyRates)
+    currencies = set(currencies)
+    databaseService.saveCurrencyCodes(currencies)
+    databaseService.saveAllExchanges(currencyRates)
+    print("Job Success")
 
 
-@app.route("/currencies/<searchBase>")
-def getCurrencyRates(searchBase):
-    dbResult = currencyDoc.find({"base": searchBase})
+@app.route("/currencies/<base>")
+def getCurrencyRates(base):
+    exchanges = databaseService.getExchangeRatesOfCurrency(base)
+    exchanges = list(map(lambda exchange: exchange.toDict, exchanges))
+    if len(exchanges) == 0:
+        messageText = "{} currency is not supported".format(base)
+        return jsonify(message=messageText),404
 
-    exchanges = []
-    for row in dbResult:
-        exchange = dict(currency=row['currency'], rate=row['rate'])
-        exchanges.append(exchange)
     return jsonify(exchanges)
 
 
 @app.route("/currencies")
 def getAllCurrencyRates():
-    dbResult = currencyDoc.find({})
-    exchanges = []
-    for row in dbResult:
-        exchange = dict(base=row["base"], currency=row['currency'], rate=row['rate'])
-        exchanges.append(exchange)
+    exchanges = databaseService.getExchangeRatesOfCurrencies()
+    exchanges = list(map(lambda exchange: exchange.toDict, exchanges))
     return jsonify(exchanges)
 
 
 @app.route("/currencies/<base>-<currency>")
 def getSpesificCurrencies(base, currency):
-    row = currencyDoc.find_one({"base": base, "currency": currency})
-    exchange = dict(base=row["base"], currency=row['currency'], rate=row['rate'])
-    return jsonify(exchange)
+
+    exchange = databaseService.getSpesificCurrencies(base,currency)
+    if exchange == None:
+        messageText = "{}-{} currency conversion is not supported".format(base,currency)
+        return jsonify(message=messageText),404
+
+
+    return jsonify(exchange.toDict)
+
+
+@app.route("/currency-codes")
+def getCurrencyCodes():
+    currencies = databaseService.getCurrenciesCodes()
+    return jsonify(currencies)
 
 
 scheduler.add_job(currencyLoaderJob, 'interval', minutes=60, next_run_time=datetime.now())
